@@ -88,9 +88,9 @@ def process_image_with_lmstudio(image_path):
                         {
                             "type": "image_url",
                             "image_url": {
-                                "url": f"data:image/png;base64,{image_data}"
-                                # Здесь также может быть опция "detail": "high" или "low" для контроля качества обработки изображения,
-                                # но для OCR обычно достаточно дефолта или "high" если есть мелкий текст
+                                "url": f"data:image/png;base64,{image_data}",
+                                "format": "png",
+                                "detail": "high"
                             }
                         },
                         {
@@ -101,7 +101,7 @@ def process_image_with_lmstudio(image_path):
                     ]
                 }
             ],
-            "temperature": 0.1,
+            "temperature": 0.0,
             "max_tokens": -1,
             "stream": False
         }
