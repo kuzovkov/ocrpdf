@@ -95,3 +95,12 @@ The tool will:
 - For LMStudio: ensure it's running with a vision-capable model before processing
 - For Tesseract: install language packs for required languages (rus+eng)
 - Processing time depends on PDF size and OCR engine performance
+
+
+## Merge text files into one
+```bash
+#example
+ls texts/Том-2-page-*.txt | sort -V | xargs cat > texts/Том-2.txt
+find texts -type f -name 'Том-2-page-*.txt' | sort -V | xargs -d '\n' cat > texts/Том-2.txt
+```
+
