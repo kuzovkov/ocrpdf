@@ -6,12 +6,19 @@ import subprocess
 import requests
 import base64
 from pathlib import Path
+from dotenv import load_dotenv
 
 def main():
+    # Load environment variables
+    load_dotenv()
+    
     parser = argparse.ArgumentParser(description='Convert PDF to text via LMStudio')
     parser.add_argument('input_pdf', help='Path to input PDF file')
     parser.add_argument('--skip-extraction', action='store_true',
                       help='Skip PDF to PNG conversion step')
+    parser.add_argument('--page', type=str, help='Process single page by number (e.g. 001)')
+    parser.add_argument('--tesseract', action='store_true',
+                      help='Use tesseract OCR instead of LMStudio')
     args = parser.parse_args()
 
     pdf_path = Path(args.input_pdf)
@@ -46,14 +53,36 @@ def main():
                 print(f"Error: No PNG files found in {png_dir}")
                 sys.exit(1)
 
-        # Step 2: Process each PNG with LMStudio
-        for png_file in sorted(png_dir.glob("*.png")):
-            print(f"Processing {png_file.name}...")
-            txt_file = txt_dir / f"{png_file.stem}.txt"
-            
-            extracted_text = process_image_with_lmstudio(png_file)
+        # Step 2: Process PNG files with LMStudio
+        png_files = sorted(png_dir.glob("*.png"))
+        
+        if args.page:
+            # Process single page
+            page_file = png_dir / f"{base_name}-page-{args.page}.png"
+            if not page_file.exists():
+                print(f"Error: Page {args.page} not found in {png_dir}")
+                sys.exit(1)
+                
+            print(f"Processing single page: {page_file.name}...")
+            txt_file = txt_dir / f"{page_file.stem}.txt"
+            if args.tesseract:
+                extracted_text = process_image_with_tesseract(page_file)
+            else:
+                extracted_text = process_image_with_lmstudio(page_file)
             with open(txt_file, "w", encoding="utf-8") as f:
                 f.write(extracted_text)
+        else:
+            # Process all pages
+            for png_file in png_files:
+                print(f"Processing {png_file.name}...")
+                txt_file = txt_dir / f"{png_file.stem}.txt"
+                
+                if args.tesseract:
+                    extracted_text = process_image_with_tesseract(png_file)
+                else:
+                    extracted_text = process_image_with_lmstudio(png_file)
+                with open(txt_file, "w", encoding="utf-8") as f:
+                    f.write(extracted_text)
 
         print(f"Processing complete. Results saved in {output_dir}")
 
@@ -74,13 +103,18 @@ def process_image_with_lmstudio(image_path):
         with open(image_path, "rb") as image_file:
             image_data = base64.b64encode(image_file.read()).decode("utf-8")
         
+        # Get settings from environment
+        model = os.getenv("LMSTUDIO_MODEL", "google/gemma-3-27b")
+        system_prompt = os.getenv("LMSTUDIO_SYSTEM_PROMPT", "Распознай эту страницу и выведи только текст дословно, более ничего выводить не нужно")
+        user_prompt = os.getenv("LMSTUDIO_USER_PROMPT", "Распознай эту страницу и выведи только текст дословно, более ничего выводить не нужно.")
+        
         headers = {"Content-Type": "application/json"}
-        payload = { 
-            "model": "google/gemma-3-27b",
+        payload = {
+            "model": model,
             "messages": [
                 {
                     "role": "system",
-                    "content": "Распознай эту страницу и выведи только текст дословно, более ничего выводить не нужно"
+                    "content": system_prompt
                 },
                 {
                     "role": "user",
@@ -95,8 +129,7 @@ def process_image_with_lmstudio(image_path):
                         },
                         {
                             "type": "text",
-                            "text": "Распознай эту страницу и выведи только текст дословно, более ничего выводить не нужно."
-                            # Или повторите инструкцию здесь, если она относится непосредственно к изображению
+                            "text": user_prompt
                         }
                     ]
                 }
@@ -114,6 +147,25 @@ def process_image_with_lmstudio(image_path):
     except Exception as e:
         print(f"Error processing {image_path.name}: {e}")
         return ""
+
+def process_image_with_tesseract(image_path):
+    """Run tesseract OCR on image and return extracted text"""
+    try:
+        result = subprocess.run(
+            ['tesseract', str(image_path), 'stdout', '-l', 'rus+eng', '--oem', '0'],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            check=True
+        )
+        return result.stdout
+    except subprocess.CalledProcessError as e:
+        print(f"Tesseract error: {e.stderr}")
+        return ""
+    except Exception as e:
+        print(f"Unexpected error in tesseract: {e}")
+        return ""
+
 
 if __name__ == "__main__":
     main()
